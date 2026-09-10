@@ -1,0 +1,1498 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Amplitude Data Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300..600&display=swap">
+
+<!--
+  SESSION 2 · THE AMPLITUDE DATA MODEL
+  ════════════════════════════════════
+  Seven interactive tools. Amplitude is the subject; Adobe is the reference
+  frame people already have. Examples are a generic broadband/mobile retailer —
+  deliberately not drawn from anyone's real implementation.
+
+    1  The event         anatomy of what gets sent
+    2  Scope             props/eVars vs event and user properties
+    3  Where it shows up which parts of the UI each type reaches
+    4  Identity          device_id, user_id, amplitude_id
+    5  Cohorts           and how they differ from Adobe segments
+    6  Arrays            and the end of s.products
+    7  Things that go away
+
+  Self-contained. No build, no dependencies, opens from file://.
+  Theme follows the OS; the button top-right overrides it for a projector.
+-->
+
+<style>
+:root {
+  --ground:  #FFFFFF;
+  --panel:   #F5F7FB;
+  --panel-2: #EBEFF7;
+  --line:    #DCE2EC;
+  --line-hi: #B9C3D4;
+  --text:    #111721;
+  --dim:     #4E5967;
+  --faint:   #7C8797;
+
+  --adobe:     #C2410C;
+  --adobe-bg:  #FEF1E9;
+  --amp:       #0B7A62;
+  --amp-bg:    #E6F5F1;
+  --accent:    #2450CE;
+  --accent-bg: #EBF0FE;
+  --bad:       #B4232F;
+  --bad-bg:    #FDECEE;
+  --warn:      #92620C;
+  --warn-bg:   #FDF5E6;
+  --dead:      #9AA5B4;
+
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --disp: "Archivo", var(--sans);
+  --btn-ink: #FFFFFF;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:  #0A0D13;  --panel:   #141A25;  --panel-2: #1C2431;
+    --line:    #27303E;  --line-hi: #3D4A5D;
+    --text:    #EFF3F9;  --dim:     #A2AEC0;  --faint:   #6E7A8B;
+    --adobe:   #FF9A5C;  --adobe-bg:#241609;
+    --amp:     #2FD9AE;  --amp-bg:  #0C2C26;
+    --accent:  #7FA6FF;  --accent-bg:#101A31;
+    --bad:     #FF8592;  --bad-bg:  #2A1116;
+    --warn:    #FFC46B;  --warn-bg: #241C0B;
+    --dead:    #545F70;  --btn-ink: #08111F;  --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:  #0A0D13;  --panel:   #141A25;  --panel-2: #1C2431;
+  --line:    #27303E;  --line-hi: #3D4A5D;
+  --text:    #EFF3F9;  --dim:     #A2AEC0;  --faint:   #6E7A8B;
+  --adobe:   #FF9A5C;  --adobe-bg:#241609;
+  --amp:     #2FD9AE;  --amp-bg:  #0C2C26;
+  --accent:  #7FA6FF;  --accent-bg:#101A31;
+  --bad:     #FF8592;  --bad-bg:  #2A1116;
+  --warn:    #FFC46B;  --warn-bg: #241C0B;
+  --dead:    #545F70;  --btn-ink: #08111F;  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 0 90px;
+  background: var(--ground); color: var(--text);
+  font-family: var(--sans); font-weight: 300;
+  font-size: 16px; line-height: 1.55;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 22px; }
+
+/* The header and tabs travel together as one sticky block. It sits outside
+   .wrap so its background spans the full window; the inner .wrap keeps the
+   content aligned with everything below. nav.tabs' own border-bottom is the
+   line at the bottom edge, so don't add another one here. */
+.stickytop { position: sticky; top: 0; z-index: 50; background: var(--ground); }
+@media (max-width: 700px) { .stickytop header.top .sub { display: none; } }
+
+header.top { padding: 34px 0 0; }
+.titlerow { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+header.top h1 {
+  font-family: var(--disp); font-variation-settings: "wdth" 106, "wght" 800;
+  font-size: 34px; line-height: 1.08; letter-spacing: -.028em; margin: 0; flex: 1 1 380px;
+}
+header.top .sub { color: var(--dim); font-size: 17px; margin: 9px 0 0; max-width: 76ch; }
+#themebtn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  background: var(--panel); border: 1px solid var(--line); color: var(--dim);
+  border-radius: 8px; padding: 8px 12px; cursor: pointer; flex: none;
+}
+#themebtn:hover { color: var(--text); border-color: var(--line-hi); }
+
+nav.tabs { display: flex; gap: 4px; margin: 26px 0 0; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+nav.tabs button {
+  font-family: var(--sans); font-size: 15px; font-weight: 500;
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--faint); padding: 11px 15px; cursor: pointer; margin-bottom: -1px;
+  display: flex; align-items: baseline; gap: 9px;
+}
+nav.tabs button .tn { font-family: var(--mono); font-size: 11px; color: var(--dead); }
+nav.tabs button:hover { color: var(--text); }
+nav.tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+nav.tabs button.on .tn { color: var(--accent); }
+
+.tool { display: none; padding-top: 30px; }
+.tool.on { display: block; }
+
+h2.th { font-family: var(--disp); font-variation-settings: "wdth" 102, "wght" 750;
+  font-size: 25px; letter-spacing: -.02em; margin: 0 0 6px; }
+p.lede { color: var(--dim); margin: 0 0 22px; max-width: 84ch; font-size: 16.5px; }
+h3.sub { font-family: var(--disp); font-variation-settings: "wdth" 100, "wght" 700;
+  font-size: 17px; margin: 30px 0 10px; }
+
+.card { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+.row2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; }
+@media (max-width: 880px) { .row2 { grid-template-columns: 1fr; } }
+
+.pill { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim);
+  display: inline-block; white-space: nowrap; }
+.pill.adobe { color: var(--adobe); border-color: var(--adobe); background: var(--adobe-bg); }
+.pill.amp   { color: var(--amp);   border-color: var(--amp);   background: var(--amp-bg); }
+
+.btn { font-family: var(--sans); font-size: 14.5px; font-weight: 500;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+.btn:hover { border-color: var(--line-hi); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--btn-ink); }
+
+.ctl { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+.ctl label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--faint); }
+.ctl select { font-family: var(--mono); font-size: 13.5px; padding: 7px 10px;
+  background: var(--ground); color: var(--text);
+  border: 1px solid var(--line); border-radius: 7px; min-width: 160px; }
+
+/* ---------- tool 1: annotated event ---------- */
+.anat { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); gap: 18px; }
+@media (max-width: 900px) { .anat { grid-template-columns: 1fr; } }
+pre.evt {
+  font-family: var(--mono); font-size: 13.5px; line-height: 1.72;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 11px; padding: 18px 20px; margin: 0; overflow-x: auto;
+}
+pre.evt .part { display: block; border-radius: 6px; padding: 0 5px; margin: 0 -5px; cursor: pointer; }
+pre.evt .part:hover { background: var(--panel-2); }
+pre.evt .part.on { background: var(--accent-bg); box-shadow: inset 2px 0 0 var(--accent); }
+pre.evt .s { color: var(--amp); }
+pre.evt .k { color: var(--accent); }
+pre.evt .c { color: var(--faint); }
+.anatnote { border: 1px solid var(--line); border-radius: 11px; padding: 18px 20px;
+  background: var(--panel); align-self: start; }
+.anatnote h4 { font-family: var(--disp); font-variation-settings: "wdth" 100, "wght" 700;
+  font-size: 18px; margin: 0 0 8px; }
+.anatnote p { margin: 0 0 10px; font-size: 15px; color: var(--dim); }
+.anatnote p:last-child { margin: 0; }
+.anatnote .adobeline { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 14.5px; color: var(--dim); }
+.anatnote .adobeline b { color: var(--adobe); font-weight: 500; }
+.anatnote .anatmore { display: inline-block; margin-top: 13px; font-size: 14.5px;
+  color: var(--accent); text-decoration: none; font-weight: 500; }
+.anatnote .anatmore:hover { text-decoration: underline; }
+
+/* ---------- tool 2: journey table ---------- */
+.jwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+table.j { border-collapse: collapse; width: 100%; min-width: 880px; font-size: 14px; }
+table.j th { text-align: left; padding: 11px 12px; background: var(--panel);
+  border-bottom: 1px solid var(--line-hi); font-weight: 500; font-size: 12.5px;
+  color: var(--dim); vertical-align: bottom; }
+table.j th .vh { font-family: var(--mono); font-size: 10.5px; color: var(--faint); display: block; margin-top: 2px; }
+table.j td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.j tr.visitsep td { background: var(--warn-bg); color: var(--warn); font-family: var(--mono);
+  font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; }
+table.j tr.step.cur td { background: var(--accent-bg); }
+.hit { font-weight: 500; }
+.hit .when { font-family: var(--mono); font-size: 11.5px; color: var(--faint); display: block; }
+.val { font-family: var(--mono); font-size: 12.5px; }
+.val.set { color: var(--text); font-weight: 500; }
+.val.carry { color: var(--dim); }
+.val.empty { color: var(--dead); }
+.val.expired { color: var(--bad); }
+.tagset { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase;
+  padding: 1px 5px; border-radius: 4px; margin-left: 5px; vertical-align: 1px; }
+.t-set { background: var(--accent-bg); color: var(--accent); }
+.t-carry { background: var(--panel-2); color: var(--faint); }
+.t-exp { background: var(--bad-bg); color: var(--bad); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 0; font-size: 13px; color: var(--faint); }
+.legend .dot { font-size: 14px; font-weight: 400; }
+.dot { margin-left: 6px; font-size: 12px; }
+.dot.on { color: var(--amp); }
+.dot.fill { color: var(--dead); }
+.caption2 { font-size: 14px; color: var(--faint); margin: 11px 0 0; max-width: 88ch; line-height: 1.5; }
+table.j td.ptd { font-size: 14px; color: var(--dim); font-weight: 300; line-height: 1.45; }
+table.j td .val + br + .val { display: inline-block; margin-top: 3px; }
+
+.verdict { margin-top: 18px; border-radius: 12px; padding: 16px 18px;
+  border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--panel); }
+.verdict h4 { font-family: var(--disp); font-variation-settings: "wdth" 100, "wght" 700;
+  font-size: 16px; margin: 0 0 7px; }
+.verdict p { margin: 0 0 8px; font-size: 15px; color: var(--dim); }
+.verdict p:last-child { margin: 0; }
+.verdict code { font-family: var(--mono); font-size: 13px; color: var(--amp); }
+
+/* ---------- scenario / picker buttons ---------- */
+.scen { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.scen button { font-family: var(--sans); font-size: 14px; text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 14px; cursor: pointer; color: var(--dim); flex: 1 1 210px; min-width: 0; }
+.scen button:hover { border-color: var(--line-hi); color: var(--text); }
+.scen button.on { border-color: var(--accent); background: var(--accent-bg); color: var(--text); }
+.scen button b { display: block; font-weight: 600; font-size: 14.5px; margin-bottom: 2px; color: var(--text); }
+
+/* ---------- tool 3: UI locator ---------- */
+.uigrid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; }
+@media (max-width: 880px) { .uigrid { grid-template-columns: 1fr; } }
+.uicol { display: flex; flex-direction: column; gap: 12px; }
+.uichrome { font-family: var(--mono); font-size: 10.5px; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--faint); }
+.uibox { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--panel);
+  transition: opacity .2s ease, border-color .2s ease, background .2s ease; }
+.uibox.dim { opacity: .34; }
+.uibox.lit { border-color: var(--amp); background: var(--amp-bg); }
+.uibox.cond { border-color: var(--warn); background: var(--warn-bg); }
+.uilbl { font-family: var(--mono); font-size: 10px; letter-spacing: .11em; text-transform: uppercase;
+  color: var(--faint); display: block; margin-bottom: 7px; }
+.uibox.lit .uilbl { color: var(--amp); }
+.uibox.cond .uilbl { color: var(--warn); }
+.uifield { display: flex; align-items: baseline; gap: 8px; font-size: 14px;
+  background: var(--ground); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 10px; margin-bottom: 6px; }
+.uifield:last-child { margin-bottom: 0; }
+.uifield.sub { margin-left: 16px; }
+.ufk { font-family: var(--mono); font-size: 11.5px; color: var(--faint); flex: none; }
+.ufv { font-family: var(--mono); font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+.uibox.dim .ufv { color: var(--dead); }
+
+/* ---------- tool 4: canonical ID table ---------- */
+.idtblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.idtbl { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; }
+.idtbl th { text-align: left; padding: 11px 14px; background: var(--panel);
+  border-bottom: 1px solid var(--line-hi); font-weight: 500; font-size: 13px; color: var(--dim); }
+.idtbl th .thn { display: block; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-top: 3px; font-weight: 400; }
+.idtbl td { padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.idtbl tr:last-child td { border-bottom: 0; }
+.idtbl td.mono { font-family: var(--mono); font-size: 12.5px; }
+.idtbl td.none { color: var(--dead); }
+.idtbl td.uid { color: var(--accent); }
+.idtbl td.d2 { color: var(--warn); }
+.idtbl td.amp1 { color: var(--amp); font-weight: 500; }
+.idtbl td.amp2 { color: var(--warn); }
+.idtbl td.changed { color: var(--amp); }
+.idtbl td .wasnote { font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+  text-decoration: line-through; margin-left: 7px; }
+.idtbl tr.mergerow td { background: var(--amp-bg); }
+.idtoggle { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.idtoggle button {
+  font-family: var(--sans); font-size: 14px; font-weight: 500;
+  background: var(--panel); border: 1px solid var(--line); color: var(--faint);
+  border-radius: 8px; padding: 8px 14px; cursor: pointer;
+}
+.idtoggle button:hover { color: var(--text); border-color: var(--line-hi); }
+.idtoggle button.on { background: var(--accent-bg); border-color: var(--accent); color: var(--text); }
+
+/* ---------- tool 4: product screenshot ---------- */
+figure.shot { margin: 0; }
+figure.shot img { display: block; width: 100%; height: auto;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+figure.shot img[hidden] { display: none; }
+figure.shot figcaption { font-size: 14px; color: var(--faint); margin-top: 10px; max-width: 84ch; }
+.shotmissing { border: 1px dashed var(--line-hi); border-radius: 11px;
+  padding: 22px 20px; background: var(--panel); font-size: 14.5px; color: var(--dim); line-height: 1.6; }
+.shotmissing b { display: block; color: var(--text); margin-bottom: 5px; }
+.shotmissing code { font-family: var(--mono); font-size: 13px; color: var(--accent);
+  background: var(--ground); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
+/* ---------- tool 4: identity timeline ---------- */
+.tl { list-style: none; margin: 0; padding: 0; }
+.tl li { position: relative; padding: 0 0 4px 34px; margin-bottom: 14px;
+  border-left: 2px solid var(--line); padding-bottom: 16px; }
+.tl li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.tl li::before { content: ""; position: absolute; left: -7px; top: 4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--ground); border: 2px solid var(--line-hi); }
+.tl li.merge::before { border-color: var(--amp); background: var(--amp); }
+.tl li.warn::before { border-color: var(--bad); background: var(--bad); }
+.tl .ev { font-weight: 500; font-size: 15px; }
+.tl .ev .clock { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 8px; font-weight: 400; }
+.tl .ids { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 7px; }
+.idchip { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 8px; background: var(--panel); color: var(--dim); }
+.idchip b { color: var(--text); font-weight: 500; }
+.idchip.new { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.idchip.none { color: var(--dead); }
+.tl .note { margin-top: 8px; font-size: 14px; color: var(--dim);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+.tl li.merge .note { background: var(--amp-bg); border-color: var(--amp); color: var(--text); }
+.tl li.warn .note { background: var(--bad-bg); border-color: var(--bad); color: var(--text); }
+
+/* ---------- tool 5: cohorts ---------- */
+.cohcmp { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; margin-top: 4px; }
+@media (max-width: 880px) { .cohcmp { grid-template-columns: 1fr; } }
+.cohside { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; background: var(--panel); }
+.cohside.a { border-top: 3px solid var(--adobe); }
+.cohside.b { border-top: 3px solid var(--amp); }
+.cohside h4 { font-family: var(--disp); font-variation-settings: "wdth" 100, "wght" 700;
+  font-size: 16px; margin: 8px 0 10px; }
+.cohdef { font-family: var(--mono); font-size: 12.5px; background: var(--ground);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  color: var(--text); line-height: 1.6; overflow-wrap: anywhere; }
+.cohside p { font-size: 14.5px; color: var(--dim); margin: 11px 0 0; }
+.uses { list-style: none; margin: 12px 0 0; padding: 0; }
+.uses li { position: relative; padding-left: 24px; font-size: 14px; color: var(--dim); margin-bottom: 6px; }
+.uses li::before { position: absolute; left: 2px; top: 0; font-weight: 600; }
+.uses li.y::before { content: "✓"; color: var(--amp); }
+.uses li.n::before { content: "✕"; color: var(--dead); }
+.uses li.n { color: var(--dead); }
+.uses li.sep { padding-left: 0; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin: 14px 0 7px; }
+.uses li.sep::before { content: ""; }
+
+/* ---------- tool 6: arrays ---------- */
+#prodIn { font-family: var(--mono); font-size: 14px; width: 100%; padding: 12px 14px;
+  background: var(--ground); color: var(--text);
+  border: 1px solid var(--line-hi); border-radius: 10px; }
+#prodIn:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.samples { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0 0; }
+.samples button { font-family: var(--mono); font-size: 12.5px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 11px; cursor: pointer; color: var(--dim); }
+.samples button:hover { border-color: var(--line-hi); color: var(--text); }
+.pcard { border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  padding: 12px 14px; margin-bottom: 10px; }
+.pcard h5 { font-family: var(--disp); font-variation-settings: "wdth" 100, "wght" 700;
+  font-size: 15px; margin: 0 0 9px; }
+.ppos { display: flex; gap: 9px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.ppos:last-child { border-bottom: 0; }
+.ppos .pn { font-family: var(--mono); font-size: 10px; color: var(--faint);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; flex: none; height: fit-content; }
+.ppos .pl { color: var(--faint); flex: 0 0 92px; font-size: 12.5px; }
+.ppos .pv { font-family: var(--mono); font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+.ppos .pv.blank { color: var(--dead); }
+
+pre.snip { font-family: var(--mono); font-size: 13px; line-height: 1.6;
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--amp);
+  border-radius: 0 9px 9px 0; padding: 14px 16px; overflow-x: auto; margin: 12px 0 0; }
+pre.snip .k { color: var(--accent); }
+pre.snip .s { color: var(--amp); }
+pre.snip .c { color: var(--faint); }
+
+ul.rows2 { list-style: none; margin: 14px 0 0; padding: 0; }
+ul.rows2 li { border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  padding: 12px 15px; margin-bottom: 9px; font-size: 15px; color: var(--dim); line-height: 1.5; }
+ul.rows2 li b { color: var(--text); font-weight: 600; }
+ul.rows2 li code { font-family: var(--mono); font-size: 13px; color: var(--amp); }
+
+/* ---------- tool 7: things that go away ---------- */
+.tterm { border: 1px solid var(--line); border-radius: 11px; background: var(--panel);
+  margin-bottom: 10px; overflow: hidden; }
+.tterm > button { width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 14px 16px; display: flex; align-items: baseline; gap: 12px;
+  font-family: var(--sans); font-size: 16px; color: var(--text); }
+.tterm > button:hover { background: var(--panel-2); }
+.tterm .tname { font-weight: 600; flex: 1 1 auto; }
+.tterm .tchev { font-family: var(--mono); font-size: 13px; color: var(--faint); flex: none; }
+.tterm .tbody { display: none; padding: 0 16px 16px; }
+.tterm.open .tbody { display: block; }
+.tterm.open > button { border-bottom: 1px solid var(--line); }
+.tpair { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 760px) { .tpair { grid-template-columns: 1fr; } }
+.tside { border-radius: 9px; padding: 12px 14px; font-size: 14.5px; line-height: 1.5; }
+.tside.now { background: var(--adobe-bg); border: 1px solid var(--adobe); color: var(--dim); }
+.tside.next { background: var(--amp-bg); border: 1px solid var(--amp); color: var(--dim); }
+.tside .sl { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  display: block; margin-bottom: 6px; }
+.tside.now .sl { color: var(--adobe); }
+.tside.next .sl { color: var(--amp); }
+.tside code { font-family: var(--mono); font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+
+.callout { border: 1px solid var(--line); border-left: 3px solid var(--warn); background: var(--warn-bg);
+  border-radius: 0 10px 10px 0; padding: 13px 16px; margin: 18px 0 0; font-size: 14.5px; color: var(--dim); }
+.callout b { color: var(--text); }
+.callout code { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.doclink { margin: 26px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14.5px; }
+.doclink a { color: var(--accent); text-decoration: none; }
+.doclink a:hover { text-decoration: underline; }
+.doclink .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 7px; }
+.doclink ul { list-style: none; margin: 0; padding: 0; }
+.doclink li { margin-bottom: 5px; }
+a.inlinedoc { color: var(--accent); text-decoration: none; font-weight: 500; }
+a.inlinedoc:hover { text-decoration: underline; }
+footer.foot { margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--line);
+  color: var(--faint); font-size: 13.5px; }
+</style>
+
+<div class="stickytop">
+<div class="wrap">
+
+<header class="top">
+  <div class="titlerow">
+    <h1>The Amplitude data model</h1>
+    <button id="themebtn" type="button">Theme</button>
+  </div>
+  <p class="sub">Seven tools for session 2. Examples use a made-up broadband and mobile retailer, so nothing here is a comment on any particular implementation. Adobe appears throughout as the reference frame, not as the subject.</p>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="on" data-t="t1"><span class="tn">01</span>The event</button>
+  <button data-t="t2"><span class="tn">02</span>Scope</button>
+  <button data-t="t3"><span class="tn">03</span>Where it shows up</button>
+  <button data-t="t4"><span class="tn">04</span>Identity</button>
+  <button data-t="t5"><span class="tn">05</span>Cohorts</button>
+  <button data-t="t6"><span class="tn">06</span>Arrays</button>
+  <button data-t="t7"><span class="tn">07</span>Things that go away</button>
+</nav>
+
+</div>
+</div><!-- /.stickytop -->
+
+<div class="wrap">
+
+<!-- ══════════════ TOOL 1 ══════════════ -->
+<section class="tool on" id="t1">
+  <h2 class="th">One event, all of it</h2>
+  <p class="lede">This is the entire data model. Click any part for what it does and what it replaces.</p>
+
+  <div class="anat">
+    <pre class="evt" id="evtcode"></pre>
+    <div class="anatnote" id="anatnote"></div>
+  </div>
+
+  <div class="callout">
+    <b>There is no other shape.</b> Page views, link clicks, app screens, server-side calls and offline imports all arrive as this. Once you've agreed what an event is and what belongs in each of the two property bags, the instrumentation conversation is mostly over.
+  </div>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/apis/analytics/http-v2" target="_blank" rel="noopener">HTTP V2 API — the event payload, field by field ↗</a></li></ul></div>
+</section>
+
+<!-- ══════════════ TOOL 2 ══════════════ -->
+<section class="tool" id="t2">
+  <h2 class="th">Scope: event, user, and persisted</h2>
+  <p class="lede">Amplitude has two scopes and one mechanism that sits between them. Worth getting straight before you map anything across, because the third one is where most of the eVar behaviour ends up.</p>
+
+  <h3 class="sub">1 · The two scopes</h3>
+  <div class="row2">
+    <div class="card">
+      <span class="pill amp">Event scope</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Describes <strong>the thing that happened</strong>. It travels with the event and is never carried to the next one.</p>
+      <p style="margin:9px 0 0;font-size:14.5px;color:var(--faint)"><code>plan_tier</code> on a plan selection, <code>error_code</code> on an error, <code>search_term</code> on a search.</p>
+    </div>
+    <div class="card">
+      <span class="pill amp">User scope</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Describes <strong>the person</strong>. Set it once and it applies to every event afterwards until something changes it.</p>
+      <p style="margin:9px 0 0;font-size:14.5px;color:var(--faint)"><code>customer_segment</code>, <code>tenure_months</code>, the plan they're currently on. It holds the current value, not the value at the time of any given event.</p>
+    </div>
+  </div>
+
+  <div class="jwrap" style="margin-top:16px">
+    <table class="j">
+      <thead>
+        <tr>
+          <th style="min-width:210px">Event</th>
+          <th><span class="pill amp">Event scope</span><span class="vh">page_section</span></th>
+          <th><span class="pill amp">User scope</span><span class="vh">account_id</span></th>
+        </tr>
+      </thead>
+      <tbody id="scopebody"></tbody>
+    </table>
+  </div>
+  <p class="caption2">The event property is present only where it was sent. The user property is empty until login, then applies to everything after it — including, from that point on, when you look back at this user's profile.</p>
+
+  <h3 class="sub">2 · Persisted properties</h3>
+  <p class="lede">Some context belongs to the journey rather than to one event or to the person: which campaign brought someone in, which page started the session, which recommendation led to an item. A <a class="inlinedoc" href="https://amplitude.com/docs/data/persisted-properties" target="_blank" rel="noopener">persisted property</a> takes an event property and applies allocation and expiration rules to it, so the value reaches events that never carried it.</p>
+
+  <div class="row2" style="margin-bottom:18px">
+    <div class="card">
+      <span class="pill">Allocation</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Which value sticks: the first one, the latest one, or the earliest and latest known — the last two of which apply <strong>backwards as well as forwards</strong>.</p>
+    </div>
+    <div class="card">
+      <span class="pill">Expiration</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">How long it keeps applying. End of session, or a custom window such as 7 or 30 days.</p>
+    </div>
+  </div>
+
+  <div class="ctl">
+    <label>Expiration
+      <select id="ppexp">
+        <option value="session">Session</option>
+        <option value="7d">Custom time — 7 days</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="jwrap">
+    <table class="j">
+      <thead>
+        <tr>
+          <th style="min-width:200px">Event</th>
+          <th><span class="vh">campaign, as sent</span></th>
+          <th><span class="vh">Original</span></th>
+          <th><span class="vh">Most recent</span></th>
+          <th><span class="vh">First known</span></th>
+          <th><span class="vh">Last known</span></th>
+        </tr>
+      </thead>
+      <tbody id="ppbody"></tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><b class="dot on">●</b> value was on the event</span>
+    <span><b class="dot fill">◌</b> filled in by allocation</span>
+  </div>
+
+  <div class="verdict" id="ppverdict"></div>
+
+  <h3 class="sub">Three you'd configure</h3>
+  <ul class="rows2">
+    <li><b>Entry page.</b> <code>page_path</code>, Original, Session. Group purchases by where the session started, even though the purchase event never carried a page path.</li>
+    <li><b>Campaign across sessions.</b> <code>utm_campaign</code>, Most recent, 7 days. Connects a marketing touch to a conversion days later without stamping UTMs on every event.</li>
+    <li><b>Item-level discovery.</b> <code>discovery_method</code>, Most recent, Session, bound to <code>products.item_id</code>. Each item in a cart keeps the search, recommendation or promo that led to it, so revenue attributes per product rather than crediting the whole order to one source. This is the piece that needs the array from tab 06.</li>
+  </ul>
+
+  <div class="callout">
+    <b>Two limits worth knowing.</b> Persisted properties are computed when you query, so they don't appear on the user profile and they aren't in raw exports — anyone reconciling a warehouse table against a chart needs to know that. They also read event properties only; a value that arrives only as a user property can't be an input, which is a reason to send marketing context as event properties as well.
+  </div>
+
+  <h3 class="sub">3 · So where do eVars land?</h3>
+  <p class="lede">Most of the eVar model is here, split across two mechanisms. The settings map closely enough that reading an eVar's configuration usually tells you which one you want.</p>
+
+  <div class="jwrap">
+    <table class="j">
+      <thead>
+        <tr><th style="min-width:230px">eVar setting</th><th>Amplitude</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="hit">Expire: Never</td><td><span class="val set">user property</span></td><td class="ptd">Describes the person, so it belongs on the profile.</td></tr>
+        <tr><td class="hit">Expire: Hit / Page View</td><td><span class="val set">event property</span></td><td class="ptd">Describes the occurrence. No persistence needed.</td></tr>
+        <tr><td class="hit">Expire: Visit</td><td><span class="val set">persisted property</span><br><span class="val carry">expiration: Session</span></td><td class="ptd">The common case in most SDRs.</td></tr>
+        <tr><td class="hit">Expire: 30 Days</td><td><span class="val set">persisted property</span><br><span class="val carry">expiration: custom time</span></td><td class="ptd">Same idea, longer window.</td></tr>
+        <tr><td class="hit">Allocation: Original Value (First)</td><td><span class="val set">Original</span></td><td class="ptd">First value, never overwritten.</td></tr>
+        <tr><td class="hit">Allocation: Most Recent (Last)</td><td><span class="val set">Most recent</span></td><td class="ptd">Direct equivalent.</td></tr>
+        <tr><td class="hit">Merchandising eVar bound to a product</td><td><span class="val set">item-level attribution</span></td><td class="ptd">Bound to an item id inside the products array rather than by position in a delimited string.</td></tr>
+        <tr><td class="hit">—</td><td><span class="val set">First known / Last known</span></td><td class="ptd">No eVar equivalent. These apply to events that already happened, which is useful when attribution data arrives after the event it describes.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <b>The difference that matters most.</b> An eVar's expiry and allocation are applied when the hit is collected, so changing them only affects data from that point on. A persisted property is evaluated when you run the chart, so you can change the window or the allocation and the whole history re-computes. Getting it wrong stops being expensive.
+  </div>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/data/persisted-properties" target="_blank" rel="noopener">Persisted properties ↗</a></li><li><a href="https://amplitude.com/docs/data/persisted-properties/verify-persisted-properties" target="_blank" rel="noopener">Verify persisted properties ↗</a></li></ul></div>
+</section>
+
+<!-- ══════════════ TOOL 3 ══════════════ -->
+<section class="tool" id="t3">
+  <h2 class="th">Where each one shows up in the UI</h2>
+  <p class="lede">Scope decides where a thing appears when someone goes looking for it. Pick a type and see which parts of the interface it reaches.</p>
+
+  <div class="scen" id="uipick">
+    <button class="on" data-u="event"><b>Event</b>Order Completed</button>
+    <button data-u="eventprop"><b>Event property</b>plan_tier</button>
+    <button data-u="userprop"><b>User property</b>customer_segment</button>
+  </div>
+
+  <div class="uigrid">
+    <div class="uicol">
+      <div class="uichrome">Chart builder</div>
+      <div class="uibox" data-z="events">
+        <span class="uilbl">Events</span>
+        <div class="uifield"><span class="ufk">1</span> <span class="ufv" id="uf-event">Order Completed</span></div>
+        <div class="uifield sub"><span class="ufk">where</span> <span class="ufv" id="uf-filter">plan_tier = premium</span></div>
+      </div>
+      <div class="uibox" data-z="groupby">
+        <span class="uilbl">Group by</span>
+        <div class="uifield"><span class="ufv" id="uf-group">plan_tier</span></div>
+      </div>
+      <div class="uibox" data-z="segment">
+        <span class="uilbl">Segment by · user filter</span>
+        <div class="uifield"><span class="ufk">All users</span></div>
+        <div class="uifield sub"><span class="ufk">where</span> <span class="ufv" id="uf-seg">customer_segment = consumer</span></div>
+      </div>
+    </div>
+    <div class="uicol">
+      <div class="uichrome">Elsewhere in the product</div>
+      <div class="uibox" data-z="cohort">
+        <span class="uilbl">Cohort builder</span>
+        <div class="uifield"><span class="ufv" id="uf-cohort">users who did Order Completed</span></div>
+      </div>
+      <div class="uibox" data-z="profile">
+        <span class="uilbl">User profile</span>
+        <div class="uifield"><span class="ufv" id="uf-profile">customer_segment: consumer</span></div>
+      </div>
+      <div class="uibox" data-z="funnel">
+        <span class="uilbl">Funnel step</span>
+        <div class="uifield"><span class="ufv" id="uf-funnel">Step 3 — Order Completed</span></div>
+      </div>
+      <div class="uibox" data-z="lookup">
+        <span class="uilbl">A chart that doesn't contain this event</span>
+        <div class="uifield"><span class="ufv" id="uf-any">available to group or filter by</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="verdict" id="uiverdict"></div>
+
+  <div class="callout">
+    <b>"Why can't I see my property?"</b> This is usually the answer. An event property only exists in the context of its event, so picking a different event removes it from the dropdown. A user property is on every chart, whether or not the person fired the event that set it.
+  </div>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/analytics/charts/build-charts-add-user-segments" target="_blank" rel="noopener">Build charts: add user segments ↗</a></li></ul></div>
+</section>
+
+<!-- ══════════════ TOOL 4 ══════════════ -->
+<section class="tool" id="t4">
+  <h2 class="th">Three IDs</h2>
+  <p class="lede">Two of them you send. The third Amplitude works out. Here are four events from one person on two devices, which is the whole mechanism in one table.</p>
+
+  <div class="idtoggle" id="idtoggle">
+    <button class="on" type="button" data-v="sent">As each event arrived</button>
+    <button type="button" data-v="resolved">After identity resolution</button>
+  </div>
+
+  <div class="idtblwrap">
+    <table class="idtbl">
+      <thead>
+        <tr>
+          <th>Device ID <span class="thn">you send</span></th>
+          <th>User ID <span class="thn">you send, once you know it</span></th>
+          <th>Event</th>
+          <th>Amplitude ID <span class="thn" id="ampcolnote">at the moment it arrived</span></th>
+        </tr>
+      </thead>
+      <tbody id="idtblbody"></tbody>
+    </table>
+  </div>
+
+  <div class="verdict" id="idtblnote" style="margin-top:14px"></div>
+
+  <div class="row2" style="margin-top:16px">
+    <div class="card">
+      <span class="pill">Device ID</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Anonymous, minted by the SDK, one per browser or app install. Present on every event. If you send nothing else, this is who the event belongs to.</p>
+    </div>
+    <div class="card">
+      <span class="pill">User ID</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Yours to define, and only present once you know who someone is. Whatever you decide a person is: a customer ID, an account ID, a resolved subscriber.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <span class="pill amp">Amplitude ID</span>
+    <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Internal, and the one that actually gets counted. Nothing you send is called <code>amplitude_id</code> — it's derived from the pattern of device and user IDs arriving together, and it can change after the fact.</p>
+    <p style="margin:9px 0 0;font-size:15px;color:var(--dim)">That last part is the bit worth dwelling on. Flip the toggle above and watch row 3.</p>
+  </div>
+
+  <h3 class="sub">The same thing, in the product</h3>
+  <p class="lede" style="margin-bottom:14px">This is the user profile those four events produce. One person, one Amplitude ID, and <strong>both device IDs listed against it</strong>.</p>
+
+  <figure class="shot">
+    <img id="profileshot" data-asset="user-profile.png" src="user-profile.png"
+         alt="Amplitude user profile for BjBUH2FqZZ8QHr39tUKc, showing both device IDs resolved to a single Amplitude ID">
+    <div class="shotmissing" id="shotmissing" hidden>
+      <b>user-profile.png not found.</b>
+      It needs to sit in the same directory as this page. Check it was included in the upload,
+      and that the filename case matches — GitHub Pages is case-sensitive where macOS isn't.
+    </div>
+    <figcaption>The Device ID(s) row is the merge, after the fact. Neither device knew about the other; the shared user ID is what brought them together.</figcaption>
+  </figure>
+
+  <h3 class="sub">The same mechanism, three ways</h3>
+  <p class="lede" style="margin-bottom:16px">Step through each one and watch the three columns.</p>
+
+  <div class="scen" id="scen">
+    <button class="on" data-s="0"><b>Cart, then login</b>One device. Anonymous browse, add to cart, log in to pay.</button>
+    <button data-s="1"><b>App and web</b>Two devices, one account. The table above, in motion.</button>
+    <button data-s="2"><b>Header enrichment</b>Identified on the mobile network, without a login.</button>
+  </div>
+
+  <ul class="tl" id="timeline"></ul>
+  <div class="verdict" id="idverdict"></div>
+
+  <h3 class="sub">The level above the person: the Accounts add-on</h3>
+  <p class="lede">Everything above resolves to an individual. Some questions aren't about individuals — how is <em>this business customer</em> tracking, how many <em>households</em> upgraded, which <em>accounts</em> have gone quiet. Amplitude reports on users by default; the <a class="inlinedoc" href="https://amplitude.com/docs/analytics/account-level-reporting" target="_blank" rel="noopener">Accounts add-on</a> adds group-level analysis so charts can count and segment by account instead.</p>
+
+  <div class="row2">
+    <div class="card">
+      <span class="pill amp">What a group is</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">A type and a value — <code>account id: 4471</code>, <code>household: h_902</code>. You define the types you need, and a user can belong to more than one.</p>
+      <p style="margin:9px 0 0;font-size:14.5px;color:var(--faint)">Group properties describe the account rather than the person: plan count, contract value, segment.</p>
+    </div>
+    <div class="card">
+      <span class="pill amp">What it changes</span>
+      <p style="margin:11px 0 0;font-size:15px;color:var(--dim)">Charts get a group option alongside users, so a funnel can count accounts that converted rather than people who clicked.</p>
+      <p style="margin:9px 0 0;font-size:14.5px;color:var(--faint)">Cohorts can be group-level too, and dynamic group properties can carry a KPI — active users in the last 7 days, say — onto each account.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Worth deciding before instrumentation, not after.</b> Group membership isn't applied to historical data, so events already ingested won't retrofit into a group type added later. It's also the natural home for the service-versus-person problem from the header enrichment scenario: the subscriber identifies a service, and the account is the thing several services hang off.
+  </div>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/get-started/identify-users" target="_blank" rel="noopener">How Amplitude identifies your users ↗</a></li><li><a href="https://amplitude.com/docs/data/sources/instrument-track-unique-users" target="_blank" rel="noopener">Track unique users — the merge cases in full ↗</a></li><li><a href="https://amplitude.com/docs/analytics/account-level-reporting" target="_blank" rel="noopener">Account-level reporting ↗</a></li></ul></div>
+</section>
+
+<!-- ══════════════ TOOL 5 ══════════════ -->
+<section class="tool" id="t5">
+  <h2 class="th">Cohorts, and how they differ from segments</h2>
+  <p class="lede">Both tools have something called a segment, and they mean roughly the same thing. The word without a counterpart is <strong>cohort</strong>. Pick a question and compare how each side expresses it, and what you can then do with the result.</p>
+
+  <div class="scen" id="cohpick">
+    <button class="on" data-c="0"><b>A property question</b>Customers in Victoria on a premium plan.</button>
+    <button data-c="1"><b>A behavioural question</b>Anyone who ordered in the last 30 days.</button>
+    <button data-c="2"><b>A behavioural question with counting</b>Viewed plans 3+ times, never ordered.</button>
+  </div>
+
+  <div class="cohcmp">
+    <div class="cohside a">
+      <span class="pill adobe">Adobe</span>
+      <h4 id="coh-a-title"></h4>
+      <div class="cohdef" id="coh-a-def"></div>
+      <p id="coh-a-note"></p>
+      <ul class="uses" id="coh-a-uses"></ul>
+    </div>
+    <div class="cohside b">
+      <span class="pill amp">Amplitude</span>
+      <h4 id="coh-b-title"></h4>
+      <div class="cohdef" id="coh-b-def"></div>
+      <p id="coh-b-note"></p>
+      <ul class="uses" id="coh-b-uses"></ul>
+    </div>
+  </div>
+
+  <div class="verdict" id="cohverdict"></div>
+
+  <h3 class="sub">The three differences worth remembering</h3>
+  <ul class="rows2">
+    <li><b>A cohort is a list of people, not a filter.</b> Amplitude computes it, stores the membership and refreshes it on a schedule. An Adobe segment is a definition applied when a report runs. That's why a cohort can be sent somewhere and a segment generally can't.</li>
+    <li><b>There is no hit-scoped cohort.</b> Adobe segments have hit, visit and visitor containers, which is the scope model again. A cohort is always a set of users; if you want hit-level filtering you do it on the chart.</li>
+    <li><b>Membership is addressable outside analytics.</b> The same cohort filters a chart, targets an experiment, gates a guide, and syncs to an ad platform or CRM. In Adobe the analytics segment and the activation audience usually live in different products with different definitions, and reconciling the two is its own job.</li>
+  </ul>
+
+  <div class="callout">
+    <b>The one to watch.</b> Because a cohort is computed and stored, a large one takes time to build and doesn't update the instant someone qualifies. For anything that needs to react within a session, an inline filter on the chart or a real-time behavioural target is the right tool, not a cohort.
+  </div>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/analytics/behavioral-cohorts" target="_blank" rel="noopener">Behavioral cohorts ↗</a></li><li><a href="https://amplitude.com/docs/analytics/define-cohort" target="_blank" rel="noopener">Define a new cohort ↗</a></li></ul></div>
+</section>
+
+<!-- ══════════════ TOOL 6 ══════════════ -->
+<section class="tool" id="t6">
+  <h2 class="th">Arrays, and the end of s.products</h2>
+  <p class="lede">Adobe gives you one products variable with positional string syntax. In Amplitude any property can hold an array, and you can have several on the same event. Edit the string and both sides update.</p>
+
+  <label style="display:block;font-size:13px;color:var(--faint);margin-bottom:6px">s.products</label>
+  <input id="prodIn" type="text" spellcheck="false"
+    value=";Mobile Plan Premium;1;65.00;event1=1;eVar12=activation|eVar14=24mth,;Handset;1;1849.00;;eVar12=upgrade">
+
+  <div class="samples" id="prodsamples"></div>
+
+  <div class="row2" style="margin-top:20px">
+    <div>
+      <h3 class="sub" style="margin-top:0"><span class="pill adobe">Adobe</span> parsed positionally</h3>
+      <div id="prodParsed"></div>
+    </div>
+    <div>
+      <h3 class="sub" style="margin-top:0"><span class="pill amp">Amplitude</span> one array property</h3>
+      <pre class="snip" id="prodJson"></pre>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Six positions, counted by semicolon.</b> Category, product, quantity, price, events, merchandising eVars, in that order, with empty slots held open by <code>;;</code>. Miss one and the price lands in the events column.
+  </div>
+
+  <h3 class="sub">One products string, versus as many arrays as you want</h3>
+  <p class="lede"><code>products</code> isn't a special variable in Amplitude. It's an event property that holds an array, so nothing stops you having several on the same event.</p>
+
+  <pre class="snip">{
+  <span class="s">"event_type"</span>: <span class="k">"Order Completed"</span>,
+  <span class="s">"event_properties"</span>: {
+    <span class="s">"products"</span>: [
+      { <span class="s">"name"</span>: <span class="k">"Mobile Plan Premium"</span>, <span class="s">"price"</span>: 65.00, <span class="s">"order_type"</span>: <span class="k">"activation"</span> },
+      { <span class="s">"name"</span>: <span class="k">"Handset"</span>,             <span class="s">"price"</span>: 1849.00 }
+    ],
+    <span class="s">"promotions_applied"</span>: [<span class="k">"SPRING"</span>, <span class="k">"PORTIN_BONUS"</span>],
+    <span class="s">"components_seen"</span>:    [<span class="k">"hero_a"</span>, <span class="k">"plan_grid"</span>],
+    <span class="s">"add_ons"</span>:            [<span class="k">"static_ip"</span>, <span class="k">"wifi_booster"</span>]
+  }
+}</pre>
+
+  <p class="lede" style="margin-top:14px">Adobe's answer for the second and third of those is list variables or a run of numbered context data keys — <code>promo.0</code>, <code>promo.1</code>, <code>promo.2</code> and so on. It works, and it caps out wherever the numbering stopped.</p>
+
+  <h3 class="sub">Before you model with them</h3>
+  <ul class="rows2">
+    <li><b>Grouping by an array unnests it.</b> Group a chart by <code>products.name</code> and you get one row per product, not one row per concatenated string.</li>
+    <li><b>A user can be counted under several values at once.</b> An order containing two products appears under both. That suits product analysis and doesn't suit totals, so agree which metrics are order-level and which are line-level before anyone builds a dashboard.</li>
+    <li><b>Merchandising eVars become fields.</b> The binding syntax, the conversion-versus-merchandising distinction and the binding events all go. A value bound to a product becomes a key on that product's object.</li>
+    <li><b>Arrays of objects and arrays of scalars are both fine.</b> Line items want objects. A list of promotion codes or add-on names is happier as a plain array of strings.</li>
+  </ul>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/analytics/charts/cart-analysis" target="_blank" rel="noopener">Cart analysis and object arrays ↗</a></li></ul></div>
+</section>
+
+<!-- ══════════════ TOOL 7 ══════════════ -->
+<section class="tool" id="t7">
+  <h2 class="th">Things that go away</h2>
+  <p class="lede">Common Adobe patterns and what happens to them. Each exists for a good reason: variables are a numbered, finite resource, so a lot of implementation craft goes into using them efficiently. When the resource stops being scarce, most of that craft stops being needed.</p>
+
+  <div id="tterms"></div>
+
+  <div class="callout">
+    <b>Worth flagging early.</b> The instinct on a migration is to reproduce what exists, and a good part of any mature SDR is there to work around the slot model rather than to answer a business question. That's a distinction to draw when we go through the SDR properly in a later session, not something to decide now.
+  </div>
+
+  <div class="doclink"><span class="lbl">Amplitude docs</span><ul><li><a href="https://amplitude.com/docs/data/transformations" target="_blank" rel="noopener">Fix your data with transformations ↗</a></li></ul></div>
+</section>
+
+<footer class="foot">
+  Session 2 · The Amplitude data model · Examples are a fictional broadband and mobile retailer.
+</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ═══════════ theme ═══════════ */
+  document.getElementById("themebtn").addEventListener("click", function () {
+    var r = document.documentElement, cur = r.getAttribute("data-theme");
+    var sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (!cur) r.setAttribute("data-theme", sysDark ? "light" : "dark");
+    else if (cur === "dark") r.setAttribute("data-theme", "light");
+    else r.removeAttribute("data-theme");
+  });
+
+  /* ═══════════ tabs ═══════════ */
+  var tabs = document.getElementById("tabs");
+  tabs.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-t]");
+    if (!b) return;
+    [].forEach.call(tabs.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+    [].forEach.call(document.querySelectorAll(".tool"), function (s) { s.classList.toggle("on", s.id === b.dataset.t); });
+    try { history.replaceState(null, "", "#" + b.dataset.t); } catch (err) {}
+  });
+  (function () {
+    var h = (location.hash || "").replace("#", "");
+    if (h) { var b = tabs.querySelector('button[data-t="' + h + '"]'); if (b) b.click(); }
+  })();
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 1 — anatomy of an event
+     ══════════════════════════════════════════════════════════ */
+
+  var ANAT = {
+    type: {
+      title: "event_type",
+      body: "<p>The name of the thing that happened, in plain language. This is what people pick from a dropdown when they build a chart, so it's read far more often than it's written.</p><p>Amplitude counts occurrences of it. There's no counter to increment and no numeric value attached to the name itself.</p>",
+      adobe: "<b>Adobe:</b> a success event, except a counter event's value is implicit here. A numeric or currency success event maps to an event plus a numeric property."
+    },
+    who: {
+      title: "device_id and user_id",
+      body: "<p>Every event carries at least one. <code>device_id</code> is anonymous and set by the SDK; <code>user_id</code> is yours to define and appears once you know who someone is.</p><p>Sending both on the same event is what joins the anonymous history to the known person. Tab 04 walks through what that does and where it bites.</p>",
+      adobe: "<b>Adobe:</b> ECID and a Customer ID set through the Identity Service."
+    },
+    time: {
+      title: "time",
+      body: "<p>When it happened, from the client. Amplitude also records when the event was uploaded and when the server received it, and corrects the client timestamp for clock skew using the gap between the two upload times.</p><p>Anything time-derived — hour of day, day of week, days since last session — comes off this at query time. None of it is instrumented, and changing the project timezone later re-derives all of it.</p>",
+      adobe: "<b>Adobe:</b> the hit timestamp, plus whatever time parting was written into props or eVars at collection time."
+    },
+    ep: {
+      title: "event_properties",
+      body: "<p>Facts about <strong>this occurrence</strong>. They travel with the event and are never carried forward to the next one.</p><p>Names are yours, there's no numbered slot to allocate, and values can be strings, numbers, booleans or arrays.</p>",
+      adobe: "<b>Adobe:</b> nearest to a prop — hit scope, no persistence — though you'd often have used an eVar for the same value to get it to stick."
+    },
+    up: {
+      title: "user_properties",
+      body: "<p>Facts about <strong>the person</strong>. Set them once and they apply to every subsequent event until something changes them.</p><p>They hold the current value. If you need to know what someone's plan was at the moment they ordered rather than what it is now, stamp it on the event as well.</p>",
+      adobe: "<b>Adobe:</b> an eVar set to never expire, with last-touch allocation and no expiry dropdown."
+    },
+    arr: {
+      title: "products",
+      body: "<p>An event property can hold an array, including an array of objects. Line items sit inside the event that describes them rather than in a variable of their own with its own syntax.</p><p>You can have as many arrays on an event as you need, and grouping a chart by one unnests it to a row per element.</p>",
+      adobe: "<b>Adobe:</b> <code>s.products</code>, plus merchandising eVars for anything product-scoped.",
+      more: { tab: "t6", label: "The whole comparison is in Arrays →" }
+    }
+  };
+
+  var EVT_HTML =
+    '{\n' +
+    '  <span class="part" data-a="type"><span class="s">"event_type"</span>: <span class="k">"Order Completed"</span>,</span>\n' +
+    '\n' +
+    '  <span class="part" data-a="who"><span class="s">"device_id"</span>:  <span class="k">"e3f1-9c02-…"</span>,\n' +
+    '  <span class="s">"user_id"</span>:    <span class="k">"cust_88213"</span>,</span>\n' +
+    '\n' +
+    '  <span class="part" data-a="time"><span class="s">"time"</span>:       1789003412000,</span>\n' +
+    '\n' +
+    '  <span class="part" data-a="ep"><span class="s">"event_properties"</span>: {          <span class="c">// this occurrence</span>\n' +
+    '    <span class="s">"plan_tier"</span>:     <span class="k">"premium"</span>,\n' +
+    '    <span class="s">"contract_term"</span>: <span class="k">"24mth"</span>,\n' +
+    '    <span class="s">"order_value"</span>:   1914.00,</span>\n' +
+    '<span class="part" data-a="arr">    <span class="s">"products"</span>: [                <span class="c">// an array property</span>\n' +
+    '      { <span class="s">"name"</span>: <span class="k">"Mobile Plan Premium"</span>, <span class="s">"price"</span>:   65.00 },\n' +
+    '      { <span class="s">"name"</span>: <span class="k">"Handset"</span>,             <span class="s">"price"</span>: 1849.00 }\n' +
+    '    ]</span>' +
+    '<span class="part" data-a="ep">  },</span>\n' +
+    '\n' +
+    '  <span class="part" data-a="up"><span class="s">"user_properties"</span>: {           <span class="c">// the person</span>\n' +
+    '    <span class="s">"customer_segment"</span>: <span class="k">"consumer"</span>,\n' +
+    '    <span class="s">"tenure_months"</span>:    14,\n' +
+    '    <span class="s">"state"</span>:            <span class="k">"VIC"</span>\n' +
+    '  }</span>\n' +
+    '}';
+
+  document.getElementById("evtcode").innerHTML = EVT_HTML;
+
+  function showAnat(key) {
+    var a = ANAT[key];
+    var more = a.more
+      ? '<a class="anatmore" href="#' + a.more.tab + '" data-goto="' + a.more.tab + '">' + a.more.label + "</a>"
+      : "";
+    document.getElementById("anatnote").innerHTML =
+      "<h4>" + a.title + "</h4>" + a.body + '<div class="adobeline">' + a.adobe + "</div>" + more;
+    [].forEach.call(document.querySelectorAll("pre.evt .part"), function (p) {
+      p.classList.toggle("on", p.dataset.a === key);
+    });
+  }
+  document.getElementById("evtcode").addEventListener("click", function (e) {
+    // .part spans nest, so closest() picks the innermost — clicking the products
+    // block selects it rather than the event_properties block around it.
+    var p = e.target.closest(".part");
+    if (p) showAnat(p.dataset.a);
+  });
+  document.getElementById("anatnote").addEventListener("click", function (e) {
+    var a = e.target.closest("a[data-goto]");
+    if (!a) return;
+    e.preventDefault();
+    var b = tabs.querySelector('button[data-t="' + a.dataset.goto + '"]');
+    if (b) { b.click(); window.scrollTo(0, 0); }
+  });
+  showAnat("type");
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 2 — event scope, user scope, persisted properties
+     ══════════════════════════════════════════════════════════ */
+
+  // One user across two sessions two days apart. `camp` is the campaign value
+  // actually present on that event; blanks are what allocation has to fill.
+  var J2 = [
+    { s: 1, when: "Mon 09:02", ev: "Page Viewed — home",    sec: "home",         camp: null,               acct: null },
+    { s: 1, when: "Mon 09:04", ev: "Page Viewed — plans",   sec: "plans",        camp: "spring_edm",       acct: null },
+    { s: 1, when: "Mon 09:07", ev: "Page Viewed — deals",   sec: "deals",        camp: "retarget_display", acct: null },
+    { s: 2, when: "Wed 14:20", ev: "Page Viewed — plans",   sec: "plans",        camp: null,               acct: null },
+    { s: 2, when: "Wed 14:23", ev: "Login Completed",       sec: "login",        camp: null,               acct: "cust_88213" },
+    { s: 2, when: "Wed 14:31", ev: "Purchase Completed",    sec: "confirmation", camp: null,               acct: null }
+  ];
+
+  function evtCell(v) {
+    return v === null
+      ? '<span class="val empty">—</span>'
+      : '<span class="val set">' + v + '</span>';
+  }
+
+  /* ---- section 1: event scope vs user scope ---- */
+  (function renderScopeTable() {
+    var acct = null, html = "", lastS = null;
+    J2.forEach(function (r) {
+      if (r.s !== lastS) {
+        html += '<tr class="visitsep"><td colspan="3">Session ' + r.s +
+                (r.s === 2 ? " — two days later" : "") + "</td></tr>";
+        lastS = r.s;
+      }
+      var isSet = r.acct !== null;
+      if (isSet) acct = r.acct;
+      html += "<tr class='step'>" +
+        '<td class="hit">' + r.ev + '<span class="when">' + r.when + "</span></td>" +
+        "<td>" + evtCell(r.sec) + "</td>" +
+        "<td>" + (acct === null
+          ? '<span class="val empty">—</span>'
+          : '<span class="val ' + (isSet ? "set" : "carry") + '">' + acct + "</span>" +
+            (isSet ? '<span class="tagset t-set">set</span>'
+                   : '<span class="tagset t-carry">carried</span>')) + "</td>" +
+      "</tr>";
+    });
+    document.getElementById("scopebody").innerHTML = html;
+  })();
+
+  /* ---- section 2: the four allocation types ---- */
+  var ppexp = document.getElementById("ppexp");
+
+  // Each allocation type resolved per row, honouring the expiration window.
+  // Session expiry scopes everything to the row's own session; a custom window
+  // long enough to span both sessions treats the journey as one stretch.
+  function allocate(expMode) {
+    var groups = expMode === "session"
+      ? [J2.filter(function (r) { return r.s === 1; }), J2.filter(function (r) { return r.s === 2; })]
+      : [J2];
+
+    var out = new Map();
+    groups.forEach(function (g) {
+      var withVal = g.filter(function (r) { return r.camp !== null; });
+      var first = withVal.length ? withVal[0].camp : null;
+      var last  = withVal.length ? withVal[withVal.length - 1].camp : null;
+
+      var running = null;      // most-recent, walking forward
+      var seenAny = false;     // has an original been set yet in this window
+      var original = null;
+      g.forEach(function (r) {
+        if (r.camp !== null) {
+          running = r.camp;
+          if (!seenAny) { original = r.camp; seenAny = true; }
+        }
+        out.set(r, {
+          original: seenAny ? original : null,   // nothing before the first capture
+          recent:   running,                     // latest so far
+          firstK:   first,                       // applies before and after
+          lastK:    last                         // applies before and after
+        });
+      });
+    });
+    return out;
+  }
+
+  function allocCell(value, onEvent) {
+    if (value === null) return '<span class="val empty">—</span>';
+    return '<span class="val ' + (onEvent ? "set" : "carry") + '">' + value + "</span>" +
+           '<span class="dot ' + (onEvent ? "on" : "fill") + '">' + (onEvent ? "●" : "◌") + "</span>";
+  }
+
+  function renderPP() {
+    var expMode = ppexp.value;
+    var alloc = allocate(expMode);
+    var html = "", lastS = null;
+
+    J2.forEach(function (r) {
+      if (r.s !== lastS) {
+        html += '<tr class="visitsep"><td colspan="6">Session ' + r.s +
+                (r.s === 2
+                  ? (expMode === "session"
+                      ? " — two days later, so a Session window starts over here"
+                      : " — two days later, still inside a 7-day window")
+                  : "") + "</td></tr>";
+        lastS = r.s;
+      }
+      var a = alloc.get(r), on = r.camp !== null;
+      html += "<tr class='step'>" +
+        '<td class="hit">' + r.ev + '<span class="when">' + r.when + "</span></td>" +
+        "<td>" + evtCell(r.camp) + "</td>" +
+        "<td>" + allocCell(a.original, on) + "</td>" +
+        "<td>" + allocCell(a.recent,   on) + "</td>" +
+        "<td>" + allocCell(a.firstK,   on) + "</td>" +
+        "<td>" + allocCell(a.lastK,    on) + "</td>" +
+      "</tr>";
+    });
+    document.getElementById("ppbody").innerHTML = html;
+
+    var purchase = alloc.get(J2[J2.length - 1]);
+    var h = "<h4>What the Purchase event is credited to</h4>";
+    h += "<p>The purchase never carried a campaign. Each allocation gives it a different answer: " +
+      "<strong>Original</strong> " + (purchase.original || "nothing") + ", " +
+      "<strong>Most recent</strong> " + (purchase.recent || "nothing") + ", " +
+      "<strong>First known</strong> " + (purchase.firstK || "nothing") + ", " +
+      "<strong>Last known</strong> " + (purchase.lastK || "nothing") + ".</p>";
+    h += expMode === "session"
+      ? "<p>With a Session window, nothing from Monday reaches Wednesday. The purchase is unattributed under every allocation, which is usually not what a marketing team wants and is the reason to think about the window rather than accept the default.</p>"
+      : "<p>With a 7-day window the whole journey is one stretch, so Monday's campaigns reach Wednesday's purchase. Note the first row: <strong>First known</strong> and <strong>Last known</strong> fill in a value for an event that happened <em>before</em> any campaign was captured, which Original and Most recent will never do.</p>";
+    h += "<p style=\"color:var(--faint)\">All four are the same underlying data. You're choosing how to read it, and you can change your mind later without touching instrumentation.</p>";
+    document.getElementById("ppverdict").innerHTML = h;
+  }
+  ppexp.addEventListener("change", renderPP);
+  renderPP();
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 3 — where it shows up
+     ══════════════════════════════════════════════════════════ */
+
+  var UIMAP = {
+    event: {
+      events: ["lit", "Order Completed"], filter: ["dim", "—"],
+      groupby: ["dim", "an event isn't something you group by"], segment: ["dim", "—"],
+      cohort: ["lit", "users who did Order Completed"], profile: ["dim", "—"],
+      funnel: ["lit", "Step 3 — Order Completed"], any: ["dim", "n/a"],
+      verdict: "<h4>An event is the unit of analysis</h4><p>It's what you put on a chart, what you build a funnel from, and what a cohort is defined by having done. It isn't something you group or segment by; its properties are.</p>"
+    },
+    eventprop: {
+      events: ["dim", "Order Completed"], filter: ["lit", "plan_tier = premium"],
+      groupby: ["cond", "plan_tier — only while Order Completed is on the chart"],
+      segment: ["dim", "not available here"],
+      cohort: ["cond", "users who did Order Completed where plan_tier = premium"],
+      profile: ["dim", "not shown on the profile"],
+      funnel: ["cond", "can filter a step that uses this event"],
+      any: ["dim", "not available — the event isn't on this chart"],
+      verdict: "<h4>Only exists in the context of its event</h4><p>Pick a different event and <code>plan_tier</code> disappears from the dropdown. It can filter its own event, break that event down, and qualify a cohort through <em>performed this event with this property</em>.</p><p>What it can't do is segment a chart that doesn't contain Order Completed. If someone wants to split every chart by plan tier, an event property won't give them that.</p>"
+    },
+    userprop: {
+      events: ["dim", "Order Completed"], filter: ["lit", "customer_segment = consumer"],
+      groupby: ["lit", "customer_segment — on any chart"],
+      segment: ["lit", "customer_segment = consumer"],
+      cohort: ["lit", "users whose customer_segment is consumer"],
+      profile: ["lit", "customer_segment: consumer"],
+      funnel: ["lit", "can filter or segment any step"],
+      any: ["lit", "available to group or filter by"],
+      verdict: "<h4>Available everywhere, on every chart</h4><p>A user property reaches the segment panel, cohort definitions, the user profile, and charts that have nothing to do with the event that set it.</p><p>Which is a reason for restraint. Every user property is on every dropdown, and it holds the current value; you can't ask what it was at the time of an event unless you also stamped it on the event.</p>"
+    }
+  };
+  var UIZONES = ["events", "filter", "groupby", "segment", "cohort", "profile", "funnel", "any"];
+  var UIFIELD = { events: "uf-event", filter: "uf-filter", groupby: "uf-group", segment: "uf-seg",
+    cohort: "uf-cohort", profile: "uf-profile", funnel: "uf-funnel", any: "uf-any" };
+  var UIBOX = { events: "events", filter: "events", groupby: "groupby", segment: "segment",
+    cohort: "cohort", profile: "profile", funnel: "funnel", any: "lookup" };
+
+  function renderUI(kind) {
+    var m = UIMAP[kind], boxState = {}, rank = { dim: 0, cond: 1, lit: 2 };
+    UIZONES.forEach(function (z) {
+      var f = document.getElementById(UIFIELD[z]);
+      if (f) f.textContent = m[z][1];
+      var b = UIBOX[z];
+      if (!(b in boxState) || rank[m[z][0]] > rank[boxState[b]]) boxState[b] = m[z][0];
+    });
+    Object.keys(boxState).forEach(function (b) {
+      var el = document.querySelector('.uibox[data-z="' + b + '"]');
+      if (!el) return;
+      el.classList.remove("dim", "lit", "cond");
+      el.classList.add(boxState[b]);
+    });
+    document.getElementById("uiverdict").innerHTML = m.verdict;
+  }
+  document.getElementById("uipick").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-u]");
+    if (!b) return;
+    [].forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+    renderUI(b.dataset.u);
+  });
+  renderUI("event");
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 4 — the three IDs, as sent vs after resolution
+     ══════════════════════════════════════════════════════════ */
+
+  var DEV_A = "70c6134c-7c50-45ba-8545-4b93856e2b7a";
+  var DEV_B = "d2afbb2a-4f91-44c9-b81f-899645a2a315";
+  var UID   = "BjBUH2FqZZ8QHr39tUKc";
+  // Matches the user-profile screenshot below: Amplitude ID 1605554802356,
+  // User ID BjBUH2FqZZ8QHr39tUKc, both device UUIDs listed against it.
+  var AMP_KEEP = "1605554802356";   // survives the merge
+  var AMP_GONE = "1605554891042";   // absorbed into AMP_KEEP
+
+  // amp: what the event carried when it arrived. resolved: what it counts as now.
+  var IDROWS = [
+    { dev: DEV_A, devCls: "",   user: null, ev: "View home page", amp: AMP_KEEP, resolved: AMP_KEEP },
+    { dev: DEV_A, devCls: "",   user: UID,  ev: "Sign in",        amp: AMP_KEEP, resolved: AMP_KEEP },
+    { dev: DEV_B, devCls: "d2", user: null, ev: "View home page", amp: AMP_GONE, resolved: AMP_KEEP, moved: true },
+    { dev: DEV_B, devCls: "d2", user: UID,  ev: "Sign in",        amp: AMP_GONE, resolved: AMP_KEEP, merge: true }
+  ];
+
+  function renderIdTable(view) {
+    var resolved = view === "resolved", html = "";
+    IDROWS.forEach(function (r) {
+      var shown = resolved ? r.resolved : r.amp;
+      var cls = resolved
+        ? (r.moved ? "amp1 changed" : "amp1")
+        : (r.amp === AMP_KEEP ? "amp1" : "amp2");
+      var hi = resolved ? (r.moved ? " mergerow" : "") : (r.merge ? " mergerow" : "");
+      html += '<tr class="' + hi.trim() + '">' +
+        '<td class="mono ' + r.devCls + '">' + r.dev + "</td>" +
+        '<td class="mono ' + (r.user ? "uid" : "none") + '">' + (r.user || "—") + "</td>" +
+        "<td>" + r.ev + "</td>" +
+        '<td class="mono ' + cls + '">' + shown +
+          (resolved && r.moved ? ' <span class="wasnote">was ' + AMP_GONE + "</span>" : "") + "</td>" +
+      "</tr>";
+    });
+    document.getElementById("idtblbody").innerHTML = html;
+    document.getElementById("ampcolnote").textContent =
+      resolved ? "what it counts as now" : "at the moment it arrived";
+
+    document.getElementById("idtblnote").innerHTML = resolved
+      ? "<h4>One user, four events</h4>" +
+        "<p>The second device's anonymous <em>View home page</em> has moved to <code>" + AMP_KEEP + "</code>. It isn't copied and it isn't left behind on <code>" + AMP_GONE + "</code> — the two identities are resolved into one, so every chart counts these four events as a single person with a single journey.</p>" +
+        "<p>This is why the pre-login browsing isn't lost. A funnel from <em>View home page</em> to something after sign-in works across both devices, even though Amplitude had no idea they were related when the first three events landed.</p>" +
+        "<p style=\"color:var(--faint)\">The resolution is applied when you query, so it reaches events that were ingested before the merge happened. Raw exports can still show the original <code>amplitude_id</code> on those older events, which is worth knowing before anyone reconciles an export against the UI by hand.</p>"
+      : "<h4>Two identities, for about four seconds</h4>" +
+        "<p>Row 3 arrives from a device Amplitude has never seen, with no user ID attached, so it opens a new anonymous identity: <code>" + AMP_GONE + "</code>.</p>" +
+        "<p>Row 4 then sends that same device with a user ID that already belongs to <code>" + AMP_KEEP + "</code>. Two identities now claim the same person, which is the trigger for a merge.</p>";
+  }
+  document.getElementById("idtoggle").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-v]");
+    if (!b) return;
+    [].forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+    renderIdTable(b.dataset.v);
+  });
+  renderIdTable("sent");
+
+  // The screenshot is inlined as a data URI for distribution. Until that's
+  // been done, fall back to the sibling file, and if that's missing too, say so
+  // rather than showing a broken image icon in front of a room.
+  (function () {
+    var img = document.getElementById("profileshot");
+    if (!img) return;
+    function fail() {
+      img.hidden = true;
+      document.getElementById("shotmissing").hidden = false;
+    }
+    img.addEventListener("error", fail);
+    // A missing image usually errors before this script runs, so the listener
+    // alone never fires. complete && naturalWidth === 0 is the "already failed"
+    // check; without it a 404 shows a broken-image icon instead of the message.
+    if (img.complete && img.naturalWidth === 0) fail();
+  })();
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 4b — identity scenarios
+     ══════════════════════════════════════════════════════════ */
+
+  var SCENARIOS = [
+    { steps: [
+        { ev: "Page Viewed — mobile plans", clock: "14:20", dev: "d_a41f", user: null, amp: "#8812 (anon)",
+          note: "First touch on this browser. The SDK mints a device_id and Amplitude opens an anonymous identity behind it." },
+        { ev: "Plan Selected", clock: "14:24", dev: "d_a41f", user: null, amp: "#8812 (anon)" },
+        { ev: "Add to Cart", clock: "14:26", dev: "d_a41f", user: null, amp: "#8812 (anon)",
+          note: "Three events banked against an anonymous identity. Nothing is lost yet, but nothing is joined either." },
+        { ev: "Login Completed", clock: "14:28", dev: "d_a41f", user: "cust_99401", amp: "#8812 → resolved", merge: true,
+          note: "The merge. The device is seen with a user_id for the first time, so the anonymous identity becomes that user and the three earlier events come with it." },
+        { ev: "Purchase Completed", clock: "14:31", dev: "d_a41f", user: "cust_99401", amp: "#8812",
+          note: "A funnel from Page Viewed to Purchase Completed counts this person once, start to finish." }
+      ],
+      verdict: "<h4>The case that works</h4><p>Anonymous history joins the known user at login, so pre-login browsing isn't orphaned. Show this one first, then the other two.</p>" },
+
+    { steps: [
+        { ev: "Page Viewed — web", clock: "10:02", dev: "d_web_51a", user: null, amp: "#7701 (anon)",
+          note: "Desktop browser, anonymous." },
+        { ev: "Login Completed", clock: "10:06", dev: "d_web_51a", user: "cust_44120", amp: "#7701 → user", merge: true,
+          note: "The web device merges into the account." },
+        { ev: "App Opened", clock: "18:40", dev: "d_app_9f3", user: null, amp: "#9925 (anon)",
+          note: "Different device_id: a phone, a separate install. Amplitude has no idea this is the same person yet." },
+        { ev: "Login Completed — app", clock: "18:41", dev: "d_app_9f3", user: "cust_44120", amp: "#9925 → #7701", merge: true,
+          note: "Same user_id as this morning, so the app device joins the identity that already exists and the two devices resolve to one person." },
+        { ev: "Purchase Completed — app", clock: "18:52", dev: "d_app_9f3", user: "cust_44120", amp: "#7701",
+          note: "Researched on desktop, bought in the app, counted as one person." }
+      ],
+      verdict: "<h4>Cross-device, if they log in on both</h4><p>The join happens because the same <code>user_id</code> appears on both devices. No device graph, no probabilistic matching.</p><p>A customer who never logs in on one of the two devices stays two people, and no configuration fixes that. The cross-device picture is as good as the login rate and no better.</p>" },
+
+    { steps: [
+        { ev: "Page Viewed — on mobile data", clock: "09:12", dev: "d_ent1", user: null, amp: "#6620 (anon)",
+          note: "Arrives on the carrier's own mobile network. No login, no cookie worth anything yet." },
+        { ev: "Identity resolved via the carrier", clock: "09:12", dev: "d_ent1", user: "cust_31882", amp: "#6620 → resolved", merge: true,
+          note: "The gateway can identify the subscriber on its own network, so the MSISDN is available to a first-party property. Your server exchanges it for the internal customer ID, and that is what goes to Amplitude. The merge happens with no login and no phone number in the analytics store." },
+        { ev: "Plan Viewed", clock: "09:14", dev: "d_ent1", user: "cust_31882", amp: "#6620" },
+        { ev: "Page Viewed — same phone, home wi-fi", clock: "19:40", dev: "d_ent1", user: "cust_31882", amp: "#6620",
+          note: "Off the mobile network there's no enrichment, but the device merged this morning and stays merged. The mechanism only has to work once per device." },
+        { ev: "Page Viewed — laptop on wi-fi", clock: "20:02", dev: "d_lap_c4", user: null, amp: "#7130 (anon)", warn: true,
+          note: "A different device that has never touched the mobile network. Enrichment can't reach it, so this one is anonymous until they log in — which for a broadband customer sitting at home is a lot of the traffic." }
+      ],
+      verdict: "<h4>Identity without a login, on part of the traffic</h4><p>This is the one genuinely telco-shaped path into the identity model, and it's worth having a view on before instrumentation starts. Four things decide whether it helps or hurts.</p><p><strong>Send a resolved ID, never the MSISDN.</strong> A phone number is personal data, and a <code>user_id</code> ends up in exports, on user profiles and in every downstream sync. Exchange it server-side for the internal customer or account ID and send that.</p><p><strong>Numbers get recycled.</strong> If the MSISDN is the identity, a reassigned number hands a new customer the previous customer's history. Resolving to an internal ID that changes when the account does avoids it; using the number directly does not.</p><p><strong>An MSISDN is a service, not a person.</strong> It identifies a SIM. Family plans, business accounts and a handed-down phone all break the assumption that one number equals one human. If the reporting question is about the account rather than the service, that's what <code>groups</code> are for.</p><p><strong>Coverage is a network property, not a behavioural one.</strong> Enrichment works on the carrier's mobile data and nowhere else, so identified rate tracks wi-fi versus cellular. Worth knowing before anyone reads it as an engagement signal.</p>" }
+  ];
+
+  var curScen = 0;
+  function renderScenario() {
+    var s = SCENARIOS[curScen], html = "";
+    s.steps.forEach(function (st) {
+      html += '<li class="' + (st.merge ? "merge" : st.warn ? "warn" : "") + '">' +
+        '<div class="ev">' + st.ev + '<span class="clock">' + st.clock + "</span></div>" +
+        '<div class="ids">' +
+          '<span class="idchip">device_id <b>' + st.dev + "</b></span>" +
+          '<span class="idchip' + (st.user ? "" : " none") + '">user_id <b>' + (st.user || "—") + "</b></span>" +
+          '<span class="idchip' + (st.merge ? " new" : "") + '">amplitude_id <b>' + st.amp + "</b></span>" +
+        "</div>" + (st.note ? '<div class="note">' + st.note + "</div>" : "") + "</li>";
+    });
+    document.getElementById("timeline").innerHTML = html;
+    document.getElementById("idverdict").innerHTML = s.verdict;
+  }
+  document.getElementById("scen").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-s]");
+    if (!b) return;
+    curScen = Number(b.dataset.s);
+    [].forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+    renderScenario();
+  });
+  renderScenario();
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 5 — cohorts vs segments
+     ══════════════════════════════════════════════════════════ */
+
+  var COHORTS = [
+    {
+      aTitle: "Segment, visitor container",
+      aDef: "Visitor\n  where State = Victoria\n  and Plan Tier (eVar) = premium",
+      aNote: "A definition stored in the segment library and applied when a report runs. Nothing is precomputed.",
+      aUses: [["sep","Can be used for"],["y","Filtering any Workspace report"],["y","A virtual report suite"],["n","Sending to an ad platform"],["n","Targeting a test"]],
+      bTitle: "Segment, or a cohort",
+      bDef: "state = VIC\nand plan_tier = premium",
+      bNote: "Both properties are user properties, so this can be an inline segment on a chart. Save it as a cohort if you want it reusable and addressable.",
+      bUses: [["sep","Can be used for"],["y","Filtering any chart"],["y","Saving and reusing across charts"],["y","Syncing to an ad platform or CRM"],["y","Targeting an experiment or guide"]],
+      verdict: "<h4>For a pure property question, the two are close</h4><p>This is the case where segment and cohort look almost the same. The difference only starts to matter when you want the result to leave the analytics tool.</p>"
+    },
+    {
+      aTitle: "Segment, visitor container",
+      aDef: "Visitor\n  where Orders (event) exists\n  within last 30 days",
+      aNote: "Expressible, though date-window logic inside a segment is fiddly and interacts with the report's own date range.",
+      aUses: [["sep","Can be used for"],["y","Filtering any Workspace report"],["n","Refreshing on a schedule as a list"],["n","Sending to an ad platform"],["n","Targeting a test"]],
+      bTitle: "Cohort",
+      bDef: "users who performed\n  Order Completed\n  at least 1 time\n  in the last 30 days",
+      bNote: "Computed and stored as a membership list, refreshed on a schedule. The date window belongs to the cohort, not to whatever chart you point it at.",
+      bUses: [["sep","Can be used for"],["y","Filtering any chart"],["y","Refreshing on a schedule"],["y","Syncing to an ad platform or CRM"],["y","Targeting an experiment or guide"],["y","Reading membership back through the API"]],
+      verdict: "<h4>Here the models diverge</h4><p>Adobe answers the question inside a report. Amplitude answers it by producing a list of people that exists independently of any report, which is what makes it usable outside analytics.</p><p>The practical consequence: the same definition drives the dashboard and the campaign, so there's no second version of \"recent purchasers\" maintained somewhere else to drift out of line.</p>"
+    },
+    {
+      aTitle: "Segment with a sequential or counted condition",
+      aDef: "Visitor\n  where Plan Page Views ≥ 3\n  and Orders = 0",
+      aNote: "Doable, and this is where segment definitions start getting hard to read and harder to keep consistent between the people who build them.",
+      aUses: [["sep","Can be used for"],["y","Filtering any Workspace report"],["n","Refreshing on a schedule as a list"],["n","Sending to an ad platform"],["n","Targeting a test"]],
+      bTitle: "Behavioural cohort",
+      bDef: "users who performed\n  Plan Viewed\n  at least 3 times\n  in the last 30 days\nand did NOT perform\n  Order Completed",
+      bNote: "Counting and exclusion are first-class parts of the builder. Sequence and time-between conditions sit in the same place.",
+      bUses: [["sep","Can be used for"],["y","Filtering any chart"],["y","Refreshing on a schedule"],["y","Syncing to an ad platform or CRM"],["y","Targeting an experiment or guide"],["y","Reading membership back through the API"]],
+      verdict: "<h4>High-intent, unconverted</h4><p>This shape of question — did a lot of one thing, never did another — is the one people reach for most once they realise cohorts exist, and it's the one that most often ends up driving something outside the analytics tool.</p><p>Worth noting for later: a cohort like this is a definition the business will argue about. Three views or five? Thirty days or fourteen? Better to have that argument once, in a named cohort, than separately in nine dashboards.</p>"
+    }
+  ];
+
+  function renderCohort(i) {
+    var c = COHORTS[i];
+    document.getElementById("coh-a-title").textContent = c.aTitle;
+    document.getElementById("coh-a-def").textContent = c.aDef;
+    document.getElementById("coh-a-note").textContent = c.aNote;
+    document.getElementById("coh-b-title").textContent = c.bTitle;
+    document.getElementById("coh-b-def").textContent = c.bDef;
+    document.getElementById("coh-b-note").textContent = c.bNote;
+    ["a", "b"].forEach(function (side) {
+      var list = c[side + "Uses"], h = "";
+      list.forEach(function (u) { h += '<li class="' + u[0] + '">' + u[1] + "</li>"; });
+      document.getElementById("coh-" + side + "-uses").innerHTML = h;
+    });
+    document.getElementById("cohverdict").innerHTML = c.verdict;
+  }
+  document.getElementById("cohpick").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-c]");
+    if (!b) return;
+    [].forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+    renderCohort(Number(b.dataset.c));
+  });
+  renderCohort(0);
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 6 — arrays
+     ══════════════════════════════════════════════════════════ */
+
+  var PROD_POS = ["Category", "Product", "Quantity", "Price", "Events", "Merch. eVars"];
+  var PROD_SAMPLES = [
+    { l: "Plan + handset", v: ";Mobile Plan Premium;1;65.00;event1=1;eVar12=activation|eVar14=24mth,;Handset;1;1849.00;;eVar12=upgrade" },
+    { l: "One product", v: "Broadband;nbn 100/20;1;89.00;;" },
+    { l: "Missing a semicolon", v: ";SIM Only;1;29.00;eVar12=activation" },
+    { l: "Three line items", v: ";Mobile Plan;1;65.00;;,;Static IP;1;10.00;;,;Wi-Fi Booster;2;120.00;;" }
+  ];
+
+  var prodIn = document.getElementById("prodIn");
+  (function () {
+    var h = "";
+    PROD_SAMPLES.forEach(function (s, i) { h += '<button type="button" data-p="' + i + '">' + s.l + "</button>"; });
+    document.getElementById("prodsamples").innerHTML = h;
+  })();
+  document.getElementById("prodsamples").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-p]");
+    if (!b) return;
+    prodIn.value = PROD_SAMPLES[Number(b.dataset.p)].v;
+    parseProducts();
+  });
+
+  function jsonKey(k) { return '<span class="s">"' + k + '"</span>'; }
+  function jsonStr(v) { return '<span class="k">"' + v + '"</span>'; }
+
+  function parseProducts() {
+    var items = prodIn.value.split(","), parsedHtml = "", objs = [];
+    items.forEach(function (item, idx) {
+      var parts = item.split(";"), short = parts.length < 6;
+      parsedHtml += '<div class="pcard"><h5>Product ' + (idx + 1) +
+        (short ? ' <span class="pill" style="color:var(--bad);border-color:var(--bad)">' +
+                 parts.length + " of 6 positions</span>" : "") + "</h5>";
+      PROD_POS.forEach(function (label, i) {
+        var v = (parts[i] || "").trim();
+        parsedHtml += '<div class="ppos"><span class="pn">' + i + '</span><span class="pl">' + label + "</span>" +
+          '<span class="pv' + (v ? "" : " blank") + '">' + (v || "(empty)") + "</span></div>";
+      });
+      parsedHtml += "</div>";
+
+      var o = {};
+      if ((parts[1] || "").trim()) o.name = parts[1].trim();
+      if ((parts[0] || "").trim()) o.category = parts[0].trim();
+      if ((parts[2] || "").trim()) o.quantity = Number(parts[2]) || parts[2].trim();
+      if ((parts[3] || "").trim()) o.price = Number(parts[3]) || parts[3].trim();
+      (parts[5] || "").split("|").forEach(function (pair) {
+        var kv = pair.split("=");
+        if (kv.length === 2 && kv[0].trim()) {
+          var key = kv[0].trim().toLowerCase()
+            .replace("evar12", "order_type").replace("evar14", "contract_term");
+          o[key] = kv[1].trim();
+        }
+      });
+      objs.push(o);
+    });
+
+    document.getElementById("prodParsed").innerHTML = parsedHtml;
+    var lines = objs.map(function (o) {
+      return "      { " + Object.keys(o).map(function (k) {
+        var v = o[k];
+        return jsonKey(k) + ": " + (typeof v === "number" ? v : jsonStr(v));
+      }).join(", ") + " }";
+    }).join(",\n");
+    document.getElementById("prodJson").innerHTML =
+      "{\n  " + jsonKey("event_properties") + ": {\n    " + jsonKey("products") + ": [\n" +
+      lines + "\n    ]\n  }\n}";
+  }
+  prodIn.addEventListener("input", parseProducts);
+  parseProducts();
+
+  /* ══════════════════════════════════════════════════════════
+     TOOL 7 — things that go away
+     ══════════════════════════════════════════════════════════ */
+
+  var TERMS = [
+    { name: "Holding the same value in a prop and an eVar",
+      now: "props give hit scope and pathing; eVars give persistence and conversion attribution. When you want both behaviours from one value, the usual answer is to set both, which spends two slots on one concept and gives it two chances to drift.",
+      next: "One property. Scope is decided when you query, so the same value answers both 'what did they view' and 'what did viewers go on to buy'." },
+
+    { name: "Time parting",
+      now: "Hour of day, day of week and weekday/weekend get derived at collection time, usually in JavaScript off the client clock, and written into props. It's the practical way to get something filterable, because a raw timestamp has enough distinct values to be useless as a dimension.",
+      next: "Hour of day and day of week are derived from the timestamp when you ask for them, so there's no cardinality problem and nothing to instrument. Amplitude also corrects the client timestamp for clock skew, and changing the project timezone re-derives every chart." },
+
+    { name: "Concatenating values, then unpacking with classifications",
+      now: "Several related values get packed into one variable with a delimiter, and a classification job splits them back out for reporting. It's the standard move when a group of related fields would otherwise cost a slot each.",
+      next: "One property per value, each independently filterable. No delimiter, no classification job, and no positional gaps to interpret when some of the fields are empty." },
+
+    { name: "Numbered keys standing in for a list",
+      now: "List variables, or a run of context data keys numbered 0 through 9 or 0 through 19. The ceiling is wherever the numbering stopped, and anything past it is dropped.",
+      next: "An array property of any length. Grouping by it unnests to one row per element." },
+
+    { name: "Merchandising eVars and s.products",
+      now: "Product-scoped values bind to a line item through position in a delimited string, with conversion and merchandising syntax variants and binding events deciding when a value attaches.",
+      next: "Fields on the objects inside an array. Nothing binds, because the value sits inside the object it describes." },
+
+    { name: "Counter, numeric and currency success events",
+      now: "An event is a number you increment. Counters answer 'how many' easily; questions about how many people, or how often each person, need a different report.",
+      next: "Count occurrences of a named event. Totals, uniques, per-user frequency and time between all come from the same event, chosen when you query. Numeric and currency events become the event plus a numeric property." },
+
+    { name: "Byte limits and truncation",
+      now: "props truncate at 100 bytes and eVars at 255. Long values are silently shortened, and the shortened form is what lands in reporting from then on.",
+      next: "Not a constraint you'll design around at these sizes." },
+
+    { name: "Processing rules and VISTA",
+      now: "Transformation happens at collection time. Processing rules run in the UI but only apply forward; VISTA runs server-side and needs Adobe engineering and a lead time. Getting it wrong means waiting for the fix and living with the gap.",
+      next: "Transformations applied in the interface by whoever spotted the problem, covering historical data as well as new, and reversible because the raw event underneath is untouched." },
+
+    { name: "Pathing, and props configured for it",
+      now: "Pathing reports need props enabled for pathing specifically, so the ability to ask a path question is a configuration decision made in advance, per variable.",
+      next: "Journey and pathing charts run over any event or property without being enabled first, which means the question can be asked by someone who didn't anticipate needing it." }
+  ];
+
+  (function () {
+    var h = "";
+    TERMS.forEach(function (t) {
+      h += '<div class="tterm">' +
+        '<button type="button"><span class="tname">' + t.name + '</span><span class="tchev">+</span></button>' +
+        '<div class="tbody"><div class="tpair">' +
+          '<div class="tside now"><span class="sl">How Adobe does it</span>' + t.now + "</div>" +
+          '<div class="tside next"><span class="sl">How Amplitude does it</span>' + t.next + "</div>" +
+        "</div></div></div>";
+    });
+    document.getElementById("tterms").innerHTML = h;
+  })();
+  document.getElementById("tterms").addEventListener("click", function (e) {
+    var b = e.target.closest(".tterm > button");
+    if (!b) return;
+    var t = b.parentNode;
+    t.classList.toggle("open");
+    t.querySelector(".tchev").textContent = t.classList.contains("open") ? "−" : "+";
+  });
+
+})();
+</script>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Amplitude Data Model — Session 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300..600&display=swap">
+
+<style>
+:root {
+  --ground:#FFFFFF; --panel:#F5F7FB; --panel-2:#EBEFF7;
+  --line:#DCE2EC; --line-hi:#B9C3D4;
+  --text:#111721; --dim:#4E5967; --faint:#7C8797;
+  --accent:#2450CE; --accent-bg:#EBF0FE;
+  --amp:#0B7A62; --amp-bg:#E6F5F1;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --disp:"Archivo",var(--sans);
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0A0D13; --panel:#141A25; --panel-2:#1C2431;
+    --line:#27303E; --line-hi:#3D4A5D;
+    --text:#EFF3F9; --dim:#A2AEC0; --faint:#6E7A8B;
+    --accent:#7FA6FF; --accent-bg:#101A31;
+    --amp:#2FD9AE; --amp-bg:#0C2C26;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0A0D13; --panel:#141A25; --panel-2:#1C2431;
+  --line:#27303E; --line-hi:#3D4A5D;
+  --text:#EFF3F9; --dim:#A2AEC0; --faint:#6E7A8B;
+  --accent:#7FA6FF; --accent-bg:#101A31;
+  --amp:#2FD9AE; --amp-bg:#0C2C26;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:0 22px 80px;background:var(--ground);color:var(--text);
+  font-family:var(--sans);font-weight:300;font-size:16px;line-height:1.55}
+.wrap{max-width:780px;margin:0 auto}
+
+header{padding:56px 0 0}
+h1{font-family:var(--disp);font-variation-settings:"wdth" 106,"wght" 800;
+  font-size:38px;line-height:1.06;letter-spacing:-.03em;margin:0}
+.sub{color:var(--dim);font-size:18px;margin:12px 0 0;max-width:62ch}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.meta span{font-family:var(--mono);font-size:12px;letter-spacing:.05em;
+  border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--dim)}
+
+a.cta{display:block;text-decoration:none;color:inherit;margin-top:34px;
+  border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:0 14px 14px 0;padding:22px 24px;background:var(--panel);
+  box-shadow:var(--shadow);transition:border-color .15s ease,background .15s ease}
+a.cta:hover{border-color:var(--line-hi);border-left-color:var(--accent);background:var(--panel-2)}
+a.cta h2{font-family:var(--disp);font-variation-settings:"wdth" 102,"wght" 750;
+  font-size:23px;margin:0 0 6px;letter-spacing:-.02em}
+a.cta p{margin:0;color:var(--dim);font-size:16px}
+a.cta .go{font-family:var(--mono);font-size:12px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent);display:block;margin-top:12px}
+
+h3{font-family:var(--disp);font-variation-settings:"wdth" 100,"wght" 700;
+  font-size:17px;margin:38px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);font-weight:400;
+  padding:0 12px 8px 0;border-bottom:1px solid var(--line-hi)}
+td{padding:10px 12px 10px 0;border-bottom:1px solid var(--line);
+  color:var(--dim);vertical-align:top;line-height:1.45}
+td.n{font-family:var(--mono);font-size:12px;color:var(--faint);width:34px}
+td.t{color:var(--text);font-weight:500;width:32%}
+@media (max-width:560px){ td.t{width:auto} table,tbody,tr,td,th{display:block}
+  thead{display:none} tr{border-bottom:1px solid var(--line);padding:10px 0}
+  td{border:0;padding:2px 0} td.n{display:none} }
+
+.note{margin-top:34px;border:1px solid var(--line);border-left:3px solid var(--amp);
+  background:var(--amp-bg);border-radius:0 10px 10px 0;padding:14px 16px;
+  font-size:14.5px;color:var(--dim)}
+.note b{color:var(--text)}
+footer{margin-top:54px;padding-top:20px;border-top:1px solid var(--line);
+  color:var(--faint);font-size:13.5px}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>The Amplitude data model</h1>
+    <p class="sub">Interactive material from session 2 of the enablement series, for people who know Adobe Analytics well and are learning how the same problems are solved here.</p>
+    <div class="meta"><span>Session 2</span><span>7 tools</span><span>No login needed</span></div>
+  </header>
+
+  <a class="cta" href="data-model-tools.html">
+    <h2>Open the tools</h2>
+    <p>Seven panels covering the event, scope, identity, cohorts and arrays. Everything is live — change the settings and the examples recompute.</p>
+    <span class="go">data-model-tools.html →</span>
+  </a>
+
+  <h3>What's in it</h3>
+  <table>
+    <thead><tr><th></th><th>Tool</th><th>What it answers</th></tr></thead>
+    <tbody>
+      <tr><td class="n">01</td><td class="t">The event</td><td>What actually gets sent, and what each part replaces.</td></tr>
+      <tr><td class="n">02</td><td class="t">Scope</td><td>props and eVars against event and user properties, hit by hit.</td></tr>
+      <tr><td class="n">03</td><td class="t">Where it shows up</td><td>Which parts of the interface each type reaches, and why a property sometimes isn't in the dropdown.</td></tr>
+      <tr><td class="n">04</td><td class="t">Identity</td><td>Device ID, User ID and Amplitude ID, and what resolution does to events that already landed.</td></tr>
+      <tr><td class="n">05</td><td class="t">Cohorts</td><td>How they differ from segments, and what you can do with one that you can't do with the other.</td></tr>
+      <tr><td class="n">06</td><td class="t">Arrays</td><td>s.products and merchandising eVars, against array properties.</td></tr>
+      <tr><td class="n">07</td><td class="t">Things that go away</td><td>Common Adobe patterns and what replaces them.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Examples are a fictional broadband and mobile retailer.</b> Nothing here is drawn from any particular implementation. Adobe appears throughout as the reference frame rather than the subject.
+  </div>
+
+  <footer>Enablement series · Session 2 · The Amplitude data model</footer>
+</div>
+</html>
