@@ -95,20 +95,16 @@ body {
 .stickytop { position: sticky; top: 0; z-index: 50; background: var(--ground); }
 
 /* Scrolling down past the header collapses the subtitle to give the content
-   more room; scrolling up brings it back. max-height rather than height,
-   because height:auto can't be transitioned. */
-.stickytop header.top { transition: padding-top .22s ease; }
-.stickytop header.top .sub {
-  max-height: 7em; overflow: hidden;
-  transition: max-height .22s ease, opacity .16s ease, margin-top .22s ease;
-}
-.stickytop nav.tabs { transition: margin-top .22s ease; }
+   more room; scrolling up brings it back.
+
+   No transition here, deliberately. Animating the height meant the sticky
+   block changed size on every frame for the duration, and because that
+   changes the document height it nudges scrollY, which feeds straight back
+   into the scroll handler. The result was a visible shudder. Snapping makes
+   it a single layout change. */
 .stickytop.compact header.top { padding-top: 18px; }
-.stickytop.compact header.top .sub { max-height: 0; opacity: 0; margin-top: 0; }
+.stickytop.compact header.top .sub { display: none; }
 .stickytop.compact nav.tabs { margin-top: 16px; }
-@media (prefers-reduced-motion: reduce) {
-  .stickytop header.top, .stickytop header.top .sub, .stickytop nav.tabs { transition: none; }
-}
 @media (max-width: 700px) { .stickytop header.top .sub { display: none; } }
 
 header.top { padding: 34px 0 0; }
@@ -891,9 +887,23 @@ footer.foot { margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--l
     function update() {
       var y = window.scrollY || 0;
       var delta = y - lastY;
-      if (y <= KEEP_OPEN_ABOVE) { st.classList.remove("compact"); lastY = y; return; }
-      if (delta > COLLAPSE_DELTA) { st.classList.add("compact"); lastY = y; }
-      else if (delta < -EXPAND_DELTA) { st.classList.remove("compact"); lastY = y; }
+      if (y <= KEEP_OPEN_ABOVE) { st.classList.remove("compact"); lastY = window.scrollY || 0; return; }
+      if (delta > COLLAPSE_DELTA) {
+        // Collapsing shortens the document, and the browser's scroll anchoring
+        // pulls scrollY down by the same amount to keep the view steady. Collapse
+        // too near the top and that drop lands back under KEEP_OPEN_ABOVE, which
+        // forces an expand, which scrolls down again — the shudder. Staying a
+        // full header height clear of the threshold means the drop can't reach it.
+        if (y <= KEEP_OPEN_ABOVE + st.offsetHeight) return;
+        st.classList.add("compact");
+      }
+      else if (delta < -EXPAND_DELTA) { st.classList.remove("compact"); }
+      else { return; }
+      // Re-read after the toggle. Showing or hiding the subtitle changes the
+      // document height, which can move scrollY by itself — near the bottom of
+      // the page the browser clamps it. Without this the induced movement reads
+      // as the user scrolling the other way and the header oscillates.
+      lastY = window.scrollY || 0;
     }
     window.addEventListener("scroll", update, { passive: true });
     update();
