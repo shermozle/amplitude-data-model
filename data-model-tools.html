@@ -1,3 +1,4 @@
+<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Amplitude Data Model</title>
@@ -92,6 +93,22 @@ body {
    content aligned with everything below. nav.tabs' own border-bottom is the
    line at the bottom edge, so don't add another one here. */
 .stickytop { position: sticky; top: 0; z-index: 50; background: var(--ground); }
+
+/* Scrolling down past the header collapses the subtitle to give the content
+   more room; scrolling up brings it back. max-height rather than height,
+   because height:auto can't be transitioned. */
+.stickytop header.top { transition: padding-top .22s ease; }
+.stickytop header.top .sub {
+  max-height: 7em; overflow: hidden;
+  transition: max-height .22s ease, opacity .16s ease, margin-top .22s ease;
+}
+.stickytop nav.tabs { transition: margin-top .22s ease; }
+.stickytop.compact header.top { padding-top: 18px; }
+.stickytop.compact header.top .sub { max-height: 0; opacity: 0; margin-top: 0; }
+.stickytop.compact nav.tabs { margin-top: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  .stickytop header.top, .stickytop header.top .sub, .stickytop nav.tabs { transition: none; }
+}
 @media (max-width: 700px) { .stickytop header.top .sub { display: none; } }
 
 header.top { padding: 34px 0 0; }
@@ -853,6 +870,34 @@ footer.foot { margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--l
     else if (cur === "dark") r.setAttribute("data-theme", "light");
     else r.removeAttribute("data-theme");
   });
+
+  /* ═══════════ collapse the subtitle on scroll down ═══════════ */
+  (function () {
+    var st = document.querySelector(".stickytop");
+    if (!st) return;
+    var lastY = window.scrollY || 0;
+    var KEEP_OPEN_ABOVE = 120;   // near the top it's always expanded
+    var COLLAPSE_DELTA = 10;     // a decisive move down hides the subtitle
+    var EXPAND_DELTA = 4;        // almost any move up brings it back
+
+    // Deliberately not batched through requestAnimationFrame: some embedded
+    // browsers throttle rAF to nothing, which silently kills the whole effect.
+    // One scroll read and a class toggle is cheap enough to run inline.
+    //
+    // The two thresholds are asymmetric on purpose. With one shared threshold,
+    // a small nudge downwards straight after scrolling up flips the header
+    // closed again, which reads as flicker. lastY only moves when the class
+    // changes, so slow scrolling still accumulates past the threshold.
+    function update() {
+      var y = window.scrollY || 0;
+      var delta = y - lastY;
+      if (y <= KEEP_OPEN_ABOVE) { st.classList.remove("compact"); lastY = y; return; }
+      if (delta > COLLAPSE_DELTA) { st.classList.add("compact"); lastY = y; }
+      else if (delta < -EXPAND_DELTA) { st.classList.remove("compact"); lastY = y; }
+    }
+    window.addEventListener("scroll", update, { passive: true });
+    update();
+  })();
 
   /* ═══════════ tabs ═══════════ */
   var tabs = document.getElementById("tabs");
